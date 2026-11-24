@@ -1,0 +1,19 @@
+id = "masa.board"
+name = "Board"
+version = "0.1.0"
+min_herdr_version = "0.9.1"
+description = "One screen for every agent session: status, branch, PR, ports, plus the goals, tasks and questions each agent reports"
+platforms = ["macos"]
+
+[[panes]]
+id = "popup"
+title = "board"
+placement = "popup"
+width = "95%"
+height = "95%"
+command = ["sh", "run.sh", "board.mjs"]
+
+[[actions]]
+id = "open"
+title = "Open board popup"
+command = ["sh", "run.sh", "open.mjs"]

@@ -2,25 +2,7 @@
 
 A herdr popup that lists every agent session on one screen, ordered by who needs you.
 
-```
- board  6 sessions  │ j/k select │ Space expand │ Enter go/type/send │ x done │ d finished goals │ i idle │ r refresh │ q quit
-
-Needs you (1)  2 open questions
-⚠ api/auth       api   feat/token-refresh   #412 open ✓CI   :3000   2/5   ? 2   Rotate refresh tokens
-  ┏ Goal 1  active  Rotate refresh tokens
-  ┃ Questions 2
-  ┃   ? Keep the old tokens valid for 24h?
-  ┃       assuming: yes
-  ┃   ? Which Redis instance holds the denylist?
-  ┃       blocks: writing the migration
-  ┃ Tasks 2/5
-  ┃   ☑ add the rotation endpoint
-  ┃   ☐ migrate existing sessions
-  ┗
-
-Working (2)
-● web/checkout   web   fix/cart-total       #88 draft …CI   :5173   1/3         Fix rounding in cart total
-```
+![The board popup: one session expanded with its questions, tasks and next action, the others on one line each](docs/screenshot.png)
 
 Two kinds of information are shown:
 

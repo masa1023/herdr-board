@@ -308,8 +308,13 @@ function build() {
           }
         }
         if (g.tasks.length) {
-          lines.push(paint(clip(`  ┃ Tasks ${g.tasks.filter((t) => t.done).length}/${g.tasks.length}`), 1));
-          for (const t of g.tasks) push({ row: r, kind: "task", item: t }, `  ┃   ${t.done ? "☑" : "☐"} ${t.text}`, t.done ? 90 : 0);
+          const blocked = g.tasks.filter((t) => !t.done && noteOf(t, "blocked")).length;
+          lines.push(paint(clip(`  ┃ Tasks ${g.tasks.filter((t) => t.done).length}/${g.tasks.length}${blocked ? `  ${blocked} blocked` : ""}`), 1));
+          for (const t of g.tasks) {
+            const why = t.done ? null : noteOf(t, "blocked");
+            push({ row: r, kind: "task", item: t }, `  ┃   ${t.done ? "☑" : why ? "⊘" : "☐"} ${t.text}`, t.done ? 90 : 0);
+            if (why) sub(`  ┃       blocked: ${why}`);
+          }
         }
         if (g.next.length) {
           lines.push(paint(clip("  ┃ Next (Enter sends it)"), 1));

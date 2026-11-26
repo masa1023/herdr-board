@@ -73,7 +73,7 @@ The user watches all sessions on one board and answers from there.
 Run `herdr-board` for the command list and `herdr-board show` for the current notes and their numbers.
 
 - **Goals**: if a request continues the current goal, add tasks to it; if it is a different topic, add a goal with `goal add`. Do not create a goal for something that takes one or two tool calls.
-- **Tasks**: before starting, split the work into 3–7 tasks with `task add`, and run `task done` as each one finishes.
+- **Tasks**: before starting, split the work into 3–7 tasks with `task add`, and run `task done` as each one finishes. When a task cannot be worked on yet (it waits for another task, a merge, a deploy, someone else), mark it with `task block` and the reason, and `task unblock` it when that is resolved.
 - **Questions**: write a question with `ask` before asking the user. Keep working on whatever does not depend on the answer. Use `--assume` when you proceed on an assumption and `--blocks` when some work cannot proceed. Stop only when everything is waiting. Record the reply with `answer`.
 - **Next**: when a goal reaches a natural pause, suggest one to three follow-ups with `next`. The `--prompt` must make sense on its own.
 - **Finishing**: when all tasks and questions are settled, run `goal done`; if the goal is abandoned, `goal drop`.
@@ -91,6 +91,8 @@ herdr-board goal done <g> "<result>"          finished (moved to the archive fil
 herdr-board goal drop <g> "<reason>"          abandoned (moved to the archive file)
 herdr-board task add <g> "<task>"
 herdr-board task done <g> <n>
+herdr-board task block <g> <n> "<reason>"     cannot be worked on yet
+herdr-board task unblock <g> <n>
 herdr-board ask <g> "<question>" [--assume "<working assumption>"] [--blocks "<work that is waiting>"]
 herdr-board answer <g> <n> "<answer>"
 herdr-board next <g> "<label>" --prompt "<instruction>" [--reason "<why>"]

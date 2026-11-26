@@ -14,6 +14,8 @@ const USAGE = `herdr-board — write the goals, tasks and questions shown on the
   herdr-board goal drop <g> "<reason>"          abandoned (moved to the archive file)
   herdr-board task add <g> "<task>"
   herdr-board task done <g> <n>
+  herdr-board task block <g> <n> "<reason>"     cannot be worked on yet
+  herdr-board task unblock <g> <n>
   herdr-board ask <g> "<question>" [--assume "<working assumption>"] [--blocks "<work that is waiting>"]
   herdr-board answer <g> <n> "<answer>"
   herdr-board next <g> "<label>" --prompt "<instruction>" [--reason "<why>"]
@@ -66,7 +68,10 @@ function show() {
   goals.forEach((g, gi) => {
     console.log(`${gi + 1}. ${g.state}: ${g.name}`);
     for (const n of g.notes) console.log(`     ${n}`);
-    g.tasks.forEach((t, i) => console.log(`   task ${i + 1} [${t.done ? "x" : " "}] ${t.text}`));
+    g.tasks.forEach((t, i) => {
+      console.log(`   task ${i + 1} [${t.done ? "x" : " "}] ${t.text}`);
+      for (const n of t.notes) console.log(`       ${n}`);
+    });
     g.questions.forEach((q, i) => {
       console.log(`   question ${i + 1} [${q.done ? "x" : " "}] ${q.text}`);
       for (const n of q.notes) console.log(`       ${n}`);
@@ -100,9 +105,18 @@ switch (cmd) {
     break;
   }
   case "task": {
-    const [sub, g, x] = rest;
+    const [sub, g, x, why] = rest;
+    const unblock = (t) => (t.notes = t.notes.filter((n) => !n.startsWith("blocked: ")));
     if (sub === "add") goalAt(g).tasks.push({ done: false, text: need(x, "task"), notes: [] });
-    else if (sub === "done") itemAt(goalAt(g).tasks, x, "task").done = true;
+    else if (sub === "done") {
+      const t = itemAt(goalAt(g).tasks, x, "task");
+      t.done = true;
+      unblock(t);
+    } else if (sub === "block") {
+      const t = itemAt(goalAt(g).tasks, x, "task");
+      unblock(t);
+      t.notes.push(`blocked: ${need(why, "reason")}`);
+    } else if (sub === "unblock") unblock(itemAt(goalAt(g).tasks, x, "task"));
     else fail(`unknown: task ${sub ?? ""}\n\n${USAGE}`);
     break;
   }

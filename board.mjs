@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Lists every herdr agent, ordered: needs you → working → idle.
-// Status, branch, PR and ports are collected automatically; goals, tasks, blocked work and questions come from the notes agents write with herdr-board.
+// Status, branch, PR and ports are collected automatically; goals, tasks, waiting work and questions come from the notes agents write with herdr-board.
 import { execFile } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -250,7 +250,7 @@ function rows() {
       questions: open.length ? String(open.length) : "",
       // Show the goal when there is one; otherwise fall back to the terminal title.
       summary: running.length ? `${goals.length > 1 ? `[${goals.length}] ` : ""}${running.at(-1).name}` : goals.length ? `(on hold) ${goals.at(-1).name}` : title,
-      haystack: [ws, tab, a.cwd, g.branch, title, ...goals.flatMap((x) => [x.name, ...[...x.tasks, ...x.questions, ...x.blocked].map((i) => i.text)])]
+      haystack: [ws, tab, a.cwd, g.branch, title, ...goals.flatMap((x) => [x.name, ...[...x.tasks, ...x.questions, ...x.waiting].map((i) => i.text)])]
         .filter(Boolean)
         .join("\n")
         .toLowerCase(),
@@ -305,7 +305,7 @@ function build() {
       const expanded = ONCE || state.expanded === r.agent.pane_id;
       // Collapsed sessions take one line; open questions show only as a count.
       if (!expanded) continue;
-      // One frame per goal, split into Questions, Tasks and Blocked.
+      // One frame per goal, split into Questions, Tasks and Waiting.
       r.goals.forEach((g, gi) => {
         const held = g.state === "on hold";
         const open = g.questions.filter((x) => !x.done);
@@ -322,11 +322,11 @@ function build() {
           lines.push(paint(clip(`  ┃ Tasks ${g.tasks.filter((t) => t.done).length}/${g.tasks.length}`), 1));
           for (const t of g.tasks) push({ row: r, kind: "task", item: t }, `  ┃   ${t.done ? "☑" : "☐"} ${t.text}`, t.done ? 90 : 0);
         }
-        const blocked = g.blocked.filter((x) => !x.done);
-        if (blocked.length) {
-          lines.push(paint(clip(`  ┃ Blocked ${blocked.length}`), 35));
-          for (const b of blocked) {
-            push({ row: r, kind: "blocked", item: b }, `  ┃   ⊘ ${b.text}`, 35);
+        const waiting = g.waiting.filter((x) => !x.done);
+        if (waiting.length) {
+          lines.push(paint(clip(`  ┃ Waiting ${waiting.length}`), 35));
+          for (const b of waiting) {
+            push({ row: r, kind: "waiting", item: b }, `  ┃   ◷ ${b.text}`, 35);
             for (const n of b.notes) sub(`  ┃       ${n}`);
           }
         }
@@ -365,7 +365,7 @@ function render() {
   process.stdout.write("\x1b[H" + lines.slice(offset, offset + rowsMax).map((l) => l + "\x1b[K").join("\n") + "\x1b[J");
 }
 
-const LIST = { task: "tasks", blocked: "blocked", question: "questions" };
+const LIST = { task: "tasks", waiting: "waiting", question: "questions" };
 
 // Toggle done/undone. Re-read the file before writing because the agent may be writing at the same time.
 function toggle(entry) {
@@ -391,13 +391,13 @@ const herdrDo = (...args) =>
     });
   });
 
-// Type a question, task or blocked item into the agent's prompt without submitting it, so the user can finish the message.
+// Type a question, task or waiting item into the agent's prompt without submitting it, so the user can finish the message.
 async function activate(target) {
   state.flash = null;
   const pane = target.row.agent.pane_id;
   // Typing into an agent that is blocked on a dialog would pick one of its options.
   if (LIST[target.kind] && target.row.status !== "blocked") {
-    const label = { task: "Task", blocked: "Blocked", question: "Question" }[target.kind];
+    const label = { task: "Task", waiting: "Waiting", question: "Question" }[target.kind];
     const error = await herdrDo("pane", "send-text", pane, `${label} "${target.item.text}": `);
     if (error) return void (state.flash = `✗ Typing failed: ${error}`);
   }

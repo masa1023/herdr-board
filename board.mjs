@@ -54,6 +54,8 @@ const state = {
   showDone: false,
   flash: null,
   error: null,
+  query: "",
+  searching: false,
 };
 
 let pruned = false;
@@ -248,12 +250,19 @@ function rows() {
       questions: open.length ? String(open.length) : "",
       // Show the goal when there is one; otherwise fall back to the terminal title.
       summary: running.length ? `${goals.length > 1 ? `[${goals.length}] ` : ""}${running.at(-1).name}` : goals.length ? `(on hold) ${goals.at(-1).name}` : title,
+      haystack: [ws, tab, a.cwd, g.branch, title, ...goals.flatMap((x) => [x.name, ...[...x.tasks, ...x.questions, ...x.blocked].map((i) => i.text)])]
+        .filter(Boolean)
+        .join("\n")
+        .toLowerCase(),
     };
   });
 }
 
+// Every space-separated word of the query must appear somewhere in the session.
+const matches = (r) => state.query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => r.haystack.includes(w));
+
 function build() {
-  const all = rows();
+  const all = rows().filter(matches);
   const cols = process.stdout.columns ?? 120;
   const lines = [];
   const selectable = [];
@@ -275,14 +284,17 @@ function build() {
   };
   const sub = (line) => lines.push(paint(clip(line), 90));
 
-  lines.push(paint(clip(` board  ${all.length} sessions  │ j/k select │ Space expand │ Enter go/type │ x done │ d finished goals │ i idle │ r refresh │ q quit`), 1));
+  lines.push(paint(clip(` board  ${all.length} sessions  │ / search │ j/k select │ Space expand │ Enter go/type │ x done │ d finished goals │ i idle │ r refresh │ q quit`), 1));
+  if (state.searching || state.query) {
+    lines.push(paint(clip(` / ${state.query}${state.searching ? "▏" : ""}   ${all.length} match${all.length === 1 ? "" : "es"} │ ↑/↓ select │ Enter go │ Esc clear`), "1;35"));
+  }
   if (state.error) lines.push(paint(` ${state.error}`, 31));
   if (state.flash) lines.push(paint(clip(` ${state.flash}`), 32));
 
   const needsMe = (r) => r.open.length > 0 || SECTIONS[0].statuses.includes(r.status);
   for (const sec of SECTIONS) {
     const items = sec.key === "attention" ? all.filter(needsMe) : all.filter((r) => !needsMe(r) && sec.statuses.includes(r.status));
-    const collapsed = sec.key === "idle" && !state.showIdle;
+    const collapsed = sec.key === "idle" && !state.showIdle && !state.query;
     const openCount = items.reduce((n, r) => n + r.open.length, 0);
     lines.push("");
     lines.push(paint(`${sec.title} (${items.length})${openCount ? `  ${openCount} open question${openCount > 1 ? "s" : ""}` : ""}${collapsed ? "  — press i to show" : ""}`, sec.key === "attention" && items.length ? "1;33" : 1));
@@ -416,7 +428,29 @@ if (process.stdin.isTTY) {
   process.stdin.resume();
   process.stdin.on("data", async (buf) => {
     const k = buf.toString();
-    if (k === "q" || k === "\x03" || k === "\x1b") return quit();
+    if (k === "\x03") return quit();
+    // Esc clears the search first and closes the popup only when there is none.
+    if (k === "\x1b" && (state.searching || state.query)) {
+      state.query = "";
+      state.searching = false;
+      state.selected = 0;
+      state.selKey = null;
+      return render();
+    }
+    // While typing a query, letters go into it; arrows and Enter still move and go.
+    if (state.searching && !k.startsWith("\x1b") && k !== "\r" && k !== "\n") {
+      if (k === "\x7f" || k === "\b") state.query = Array.from(state.query).slice(0, -1).join("");
+      else if (k === "\x15") state.query = "";
+      else state.query += k.replace(/[\x00-\x1f\x7f]/g, "");
+      state.selected = 0;
+      state.selKey = null;
+      return render();
+    }
+    if (k === "/") {
+      state.searching = true;
+      return render();
+    }
+    if (k === "q" || k === "\x1b") return quit();
     const nav = k === "j" || k === "\x1b[B" ? 1 : k === "k" || k === "\x1b[A" ? -1 : 0;
     const enter = k === "\r" || k === "\n";
     if (nav) {

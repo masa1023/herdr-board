@@ -18,8 +18,6 @@ const USAGE = `herdr-board — write the goals, tasks and questions shown on the
   herdr-board task unblock <g> <n>
   herdr-board ask <g> "<question>" [--assume "<working assumption>"] [--blocks "<work that is waiting>"]
   herdr-board answer <g> <n> "<answer>"
-  herdr-board next <g> "<label>" --prompt "<instruction>" [--reason "<why>"]
-  herdr-board next clear <g>
   herdr-board path
 
 <g> is the goal number and <n> the item number inside it (see show).
@@ -54,8 +52,6 @@ function sessionId() {
 const id = sessionId();
 const assume = opt("assume");
 const blocks = opt("blocks");
-const prompt = opt("prompt");
-const reason = opt("reason");
 const [cmd, ...rest] = args;
 const goals = load(id);
 
@@ -76,7 +72,6 @@ function show() {
       console.log(`   question ${i + 1} [${q.done ? "x" : " "}] ${q.text}`);
       for (const n of q.notes) console.log(`       ${n}`);
     });
-    g.next.forEach((a, i) => console.log(`   next ${i + 1} ${a.text}`));
   });
 }
 
@@ -92,7 +87,7 @@ switch (cmd) {
     process.exit(0);
   case "goal": {
     const [sub, a, b] = rest;
-    if (sub === "add") goals.push({ state: "active", name: need(a, "goal"), notes: [], tasks: [], questions: [], next: [] });
+    if (sub === "add") goals.push({ state: "active", name: need(a, "goal"), notes: [], tasks: [], questions: [] });
     else if (sub === "hold") Object.assign(goalAt(a), { state: "on hold" }).notes.push(`reason: ${need(b, "reason")}`);
     else if (sub === "resume") goalAt(a).state = "active";
     else if (sub === "done" || sub === "drop") {
@@ -133,17 +128,6 @@ switch (cmd) {
     const q = itemAt(goalAt(g).questions, n, "question");
     q.done = true;
     q.notes.push(`answer: ${need(text, "answer")}`);
-    break;
-  }
-  case "next": {
-    if (rest[0] === "clear") goalAt(rest[1]).next = [];
-    else {
-      const [g, label] = rest;
-      const a = { done: false, text: need(label, "label"), notes: [] };
-      if (reason) a.notes.push(`reason: ${reason}`);
-      a.notes.push(`prompt: ${need(prompt, "--prompt")}`);
-      goalAt(g).next.push(a);
-    }
     break;
   }
   default:

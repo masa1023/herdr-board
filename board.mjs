@@ -276,7 +276,7 @@ function build() {
   };
   const sub = (line) => lines.push(paint(clip(line), 90));
 
-  lines.push(paint(clip(` board  ${all.length} sessions  │ j/k select │ Space expand │ Enter go/type/send │ x done │ d finished goals │ i idle │ r refresh │ q quit`), 1));
+  lines.push(paint(clip(` board  ${all.length} sessions  │ j/k select │ Space expand │ Enter go/type │ x done │ d finished goals │ i idle │ r refresh │ q quit`), 1));
   if (state.error) lines.push(paint(` ${state.error}`, 31));
   if (state.flash) lines.push(paint(clip(` ${state.flash}`), 32));
 
@@ -294,7 +294,7 @@ function build() {
       const expanded = ONCE || state.expanded === r.agent.pane_id;
       // Collapsed sessions take one line; open questions show only as a count.
       if (!expanded) continue;
-      // One frame per goal, split into Questions, Tasks and Next.
+      // One frame per goal, split into Questions, Tasks and Blocked.
       r.goals.forEach((g, gi) => {
         const held = g.state === "on hold";
         const open = g.questions.filter((x) => !x.done);
@@ -307,21 +307,19 @@ function build() {
             for (const n of q.notes) sub(`  ┃       ${n}`);
           }
         }
-        if (g.tasks.length) {
-          const blocked = g.tasks.filter((t) => !t.done && noteOf(t, "blocked")).length;
-          lines.push(paint(clip(`  ┃ Tasks ${g.tasks.filter((t) => t.done).length}/${g.tasks.length}${blocked ? `  ${blocked} blocked` : ""}`), 1));
-          for (const t of g.tasks) {
-            const why = t.done ? null : noteOf(t, "blocked");
-            push({ row: r, kind: "task", item: t }, `  ┃   ${t.done ? "☑" : why ? "⊘" : "☐"} ${t.text}`, t.done ? 90 : 0);
-            if (why) sub(`  ┃       blocked: ${why}`);
-          }
+        // Blocked tasks cannot be worked on yet, so they are listed apart from the tasks that can.
+        const isBlocked = (t) => !t.done && noteOf(t, "blocked");
+        const todo = g.tasks.filter((t) => !isBlocked(t));
+        const blocked = g.tasks.filter(isBlocked);
+        if (todo.length) {
+          lines.push(paint(clip(`  ┃ Tasks ${todo.filter((t) => t.done).length}/${todo.length}`), 1));
+          for (const t of todo) push({ row: r, kind: "task", item: t }, `  ┃   ${t.done ? "☑" : "☐"} ${t.text}`, t.done ? 90 : 0);
         }
-        if (g.next.length) {
-          lines.push(paint(clip("  ┃ Next (Enter sends it)"), 1));
-          for (const a of g.next) {
-            push({ row: r, kind: "next", goal: g, item: a }, `  ┃   → ${a.text}`, 36);
-            const why = noteOf(a, "reason");
-            if (why) sub(`  ┃       ${why}`);
+        if (blocked.length) {
+          lines.push(paint(clip(`  ┃ Blocked ${blocked.length}`), 35));
+          for (const t of blocked) {
+            push({ row: r, kind: "task", item: t }, `  ┃   ⊘ ${t.text}`, 35);
+            sub(`  ┃       ${noteOf(t, "blocked")}`);
           }
         }
         lines.push(paint("  ┗", held ? 90 : 36));
@@ -383,23 +381,9 @@ const herdrDo = (...args) =>
     });
   });
 
-async function sendNext(entry) {
-  const prompt = noteOf(entry.item, "prompt");
-  if (!prompt) return void (state.flash = "✗ This item has no prompt to send");
-  const error = await herdrDo("agent", "prompt", entry.row.agent.pane_id, prompt);
-  if (error) return void (state.flash = /agent_blocked/.test(error) ? "✗ Cannot send: the agent is blocked waiting for input. Go there and answer it" : `✗ Send failed: ${error}`);
-  const id = sid(entry.row.agent);
-  const goals = load(id);
-  const g = goals.find((x) => x.name === entry.goal.name);
-  if (g) g.next = [];
-  save(id, goals);
-  state.flash = `Sent: ${entry.item.text} → ${entry.row.where}`;
-}
-
 // Type a question or task into the agent's prompt without submitting it, so the user can finish the message.
 async function activate(target) {
   state.flash = null;
-  if (target.kind === "next") return sendNext(target);
   const pane = target.row.agent.pane_id;
   // Typing into an agent that is blocked on a dialog would pick one of its options.
   if (["task", "question"].includes(target.kind) && target.row.status !== "blocked") {
@@ -461,7 +445,7 @@ if (process.stdin.isTTY) {
       const target = current[state.selected];
       if (target) {
         await activate(target);
-        // Close the popup after moving or sending. Keep it open on failure so the reason stays readable.
+        // Close the popup after moving. Keep it open on failure so the reason stays readable.
         if (!state.flash?.startsWith("✗")) return quit();
       }
     } else if (k === "x") {

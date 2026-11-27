@@ -1,4 +1,4 @@
-// Reads and writes the per-session notes (goals, tasks, questions, next actions).
+// Reads and writes the per-session notes (goals, tasks, questions).
 // Shared by the board and the herdr-board command. See `herdr-board raw` for the format.
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -11,7 +11,6 @@ export const donePathFor = (id) => join(DIR, `${id}.done.md`);
 const SECTIONS = [
   ["tasks", "Tasks"],
   ["questions", "Questions"],
-  ["next", "Next"],
 ];
 
 export function parse(text) {
@@ -22,14 +21,15 @@ export function parse(text) {
   for (const line of text.split("\n")) {
     let m;
     if ((m = line.match(/^# (?:(active|on hold|done|dropped): )?(.+)/))) {
-      goal = { state: m[1] ?? "active", name: m[2].trim(), notes: [], tasks: [], questions: [], next: [] };
+      goal = { state: m[1] ?? "active", name: m[2].trim(), notes: [], tasks: [], questions: [] };
       goals.push(goal);
       list = item = null;
     } else if (!goal) {
       continue;
     } else if ((m = line.match(/^## (.+)/))) {
       const key = SECTIONS.find(([, title]) => title === m[1].trim())?.[0];
-      list = key ? goal[key] : null;
+      // Items of an unknown section (such as the removed Next) are dropped, not read as goal notes.
+      list = key ? goal[key] : [];
       item = null;
     } else if ((m = line.match(/^- (?:\[( |x|X)\] )?(.*)/))) {
       if (list) list.push((item = { done: m[1] !== undefined && m[1] !== " ", text: m[2], notes: [] }));
@@ -50,7 +50,7 @@ export function serialize(goals) {
       if (!g[key].length) continue;
       out.push(`## ${title}`);
       for (const it of g[key]) {
-        out.push(key === "next" ? `- ${it.text}` : `- [${it.done ? "x" : " "}] ${it.text}`);
+        out.push(`- [${it.done ? "x" : " "}] ${it.text}`);
         for (const n of it.notes) out.push(`  - ${n}`);
       }
     }

@@ -48,6 +48,7 @@ The plugin directory can move when you run `herdr plugin update`. If `herdr-boar
 
 | Key | Action |
 |---|---|
+| `/` | Search sessions by workspace, tab, directory, branch, title, goals, tasks and questions. Type to narrow, `↑`/`↓` to move, `Enter` to go, `Esc` to clear |
 | `j` / `k`, arrows | Move the selection |
 | `Space` | Expand or collapse the selected session |
 | `Enter` on a session | Focus that agent and close the popup |
@@ -56,7 +57,7 @@ The plugin directory can move when you run `herdr plugin update`. If `herdr-boar
 | `d` | Show the last finished goals of expanded sessions |
 | `i` | Show or hide idle sessions |
 | `r` | Refresh git, pull request and port information now |
-| `q`, `Esc` | Close |
+| `q`, `Esc` | Close (`Esc` clears the search first) |
 
 The popup opens with the session you were looking at selected and expanded.
 

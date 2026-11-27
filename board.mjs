@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Lists every herdr agent, ordered: needs you → working → idle.
-// Status, branch, PR and ports are collected automatically; goals, tasks and questions come from the notes agents write with herdr-board.
+// Status, branch, PR and ports are collected automatically; goals, tasks, blocked work and questions come from the notes agents write with herdr-board.
 import { execFile } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -220,7 +220,6 @@ function prLabel(top, branch) {
 }
 
 const sid = (a) => a.agent_session?.value ?? null;
-const noteOf = (it, key) => it.notes.find((n) => n.startsWith(`${key}: `))?.slice(key.length + 2);
 
 function rows() {
   const home = homedir();
@@ -307,19 +306,16 @@ function build() {
             for (const n of q.notes) sub(`  ┃       ${n}`);
           }
         }
-        // Blocked tasks cannot be worked on yet, so they are listed apart from the tasks that can.
-        const isBlocked = (t) => !t.done && noteOf(t, "blocked");
-        const todo = g.tasks.filter((t) => !isBlocked(t));
-        const blocked = g.tasks.filter(isBlocked);
-        if (todo.length) {
-          lines.push(paint(clip(`  ┃ Tasks ${todo.filter((t) => t.done).length}/${todo.length}`), 1));
-          for (const t of todo) push({ row: r, kind: "task", item: t }, `  ┃   ${t.done ? "☑" : "☐"} ${t.text}`, t.done ? 90 : 0);
+        if (g.tasks.length) {
+          lines.push(paint(clip(`  ┃ Tasks ${g.tasks.filter((t) => t.done).length}/${g.tasks.length}`), 1));
+          for (const t of g.tasks) push({ row: r, kind: "task", item: t }, `  ┃   ${t.done ? "☑" : "☐"} ${t.text}`, t.done ? 90 : 0);
         }
+        const blocked = g.blocked.filter((x) => !x.done);
         if (blocked.length) {
           lines.push(paint(clip(`  ┃ Blocked ${blocked.length}`), 35));
-          for (const t of blocked) {
-            push({ row: r, kind: "task", item: t }, `  ┃   ⊘ ${t.text}`, 35);
-            sub(`  ┃       ${noteOf(t, "blocked")}`);
+          for (const b of blocked) {
+            push({ row: r, kind: "blocked", item: b }, `  ┃   ⊘ ${b.text}`, 35);
+            for (const n of b.notes) sub(`  ┃       ${n}`);
           }
         }
         lines.push(paint("  ┗", held ? 90 : 36));
@@ -357,12 +353,14 @@ function render() {
   process.stdout.write("\x1b[H" + lines.slice(offset, offset + rowsMax).map((l) => l + "\x1b[K").join("\n") + "\x1b[J");
 }
 
+const LIST = { task: "tasks", blocked: "blocked", question: "questions" };
+
 // Toggle done/undone. Re-read the file before writing because the agent may be writing at the same time.
 function toggle(entry) {
   const id = sid(entry.row.agent);
-  if (!id || !["task", "question"].includes(entry.kind)) return;
+  const key = LIST[entry.kind];
+  if (!id || !key) return;
   const goals = load(id);
-  const key = entry.kind === "task" ? "tasks" : "questions";
   const item = goals.flatMap((g) => g[key]).find((x) => x.text === entry.item.text);
   if (!item) return;
   item.done = !item.done;
@@ -381,13 +379,13 @@ const herdrDo = (...args) =>
     });
   });
 
-// Type a question or task into the agent's prompt without submitting it, so the user can finish the message.
+// Type a question, task or blocked item into the agent's prompt without submitting it, so the user can finish the message.
 async function activate(target) {
   state.flash = null;
   const pane = target.row.agent.pane_id;
   // Typing into an agent that is blocked on a dialog would pick one of its options.
-  if (["task", "question"].includes(target.kind) && target.row.status !== "blocked") {
-    const label = target.kind === "task" ? "Task" : "Question";
+  if (LIST[target.kind] && target.row.status !== "blocked") {
+    const label = { task: "Task", blocked: "Blocked", question: "Question" }[target.kind];
     const error = await herdrDo("pane", "send-text", pane, `${label} "${target.item.text}": `);
     if (error) return void (state.flash = `✗ Typing failed: ${error}`);
   }

@@ -1,4 +1,4 @@
-// Reads and writes the per-session notes (goals, tasks, questions).
+// Reads and writes the per-session notes (goals, tasks, blocked work, questions).
 // Shared by the board and the herdr-board command. See `herdr-board raw` for the format.
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -10,6 +10,7 @@ export const donePathFor = (id) => join(DIR, `${id}.done.md`);
 
 const SECTIONS = [
   ["tasks", "Tasks"],
+  ["blocked", "Blocked"],
   ["questions", "Questions"],
 ];
 
@@ -21,7 +22,7 @@ export function parse(text) {
   for (const line of text.split("\n")) {
     let m;
     if ((m = line.match(/^# (?:(active|on hold|done|dropped): )?(.+)/))) {
-      goal = { state: m[1] ?? "active", name: m[2].trim(), notes: [], tasks: [], questions: [] };
+      goal = { state: m[1] ?? "active", name: m[2].trim(), notes: [], tasks: [], blocked: [], questions: [] };
       goals.push(goal);
       list = item = null;
     } else if (!goal) {

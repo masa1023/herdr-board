@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { archive, load, pathFor, save, serialize } from "./notes.mjs";
 
-const USAGE = `herdr-board — write the goals, tasks and questions shown on the board
+const USAGE = `herdr-board — write the goals, tasks, blocked work and questions shown on the board
 
   herdr-board show                              print the current notes with their numbers
   herdr-board goal add "<goal>"                 add a goal
@@ -14,8 +14,8 @@ const USAGE = `herdr-board — write the goals, tasks and questions shown on the
   herdr-board goal drop <g> "<reason>"          abandoned (moved to the archive file)
   herdr-board task add <g> "<task>"
   herdr-board task done <g> <n>
-  herdr-board task block <g> <n> "<reason>"     cannot be worked on yet
-  herdr-board task unblock <g> <n>
+  herdr-board block <g> "<work>" "<what it waits for>"   work that cannot start yet
+  herdr-board unblock <g> <n>                   the wait is over; it becomes a task
   herdr-board ask <g> "<question>" [--assume "<working assumption>"] [--blocks "<work that is waiting>"]
   herdr-board answer <g> <n> "<answer>"
   herdr-board path
@@ -68,6 +68,10 @@ function show() {
       console.log(`   task ${i + 1} [${t.done ? "x" : " "}] ${t.text}`);
       for (const n of t.notes) console.log(`       ${n}`);
     });
+    g.blocked.forEach((b, i) => {
+      console.log(`   blocked ${i + 1} [${b.done ? "x" : " "}] ${b.text}`);
+      for (const n of b.notes) console.log(`       ${n}`);
+    });
     g.questions.forEach((q, i) => {
       console.log(`   question ${i + 1} [${q.done ? "x" : " "}] ${q.text}`);
       for (const n of q.notes) console.log(`       ${n}`);
@@ -87,7 +91,7 @@ switch (cmd) {
     process.exit(0);
   case "goal": {
     const [sub, a, b] = rest;
-    if (sub === "add") goals.push({ state: "active", name: need(a, "goal"), notes: [], tasks: [], questions: [] });
+    if (sub === "add") goals.push({ state: "active", name: need(a, "goal"), notes: [], tasks: [], blocked: [], questions: [] });
     else if (sub === "hold") Object.assign(goalAt(a), { state: "on hold" }).notes.push(`reason: ${need(b, "reason")}`);
     else if (sub === "resume") goalAt(a).state = "active";
     else if (sub === "done" || sub === "drop") {
@@ -100,19 +104,23 @@ switch (cmd) {
     break;
   }
   case "task": {
-    const [sub, g, x, why] = rest;
-    const unblock = (t) => (t.notes = t.notes.filter((n) => !n.startsWith("blocked: ")));
+    const [sub, g, x] = rest;
     if (sub === "add") goalAt(g).tasks.push({ done: false, text: need(x, "task"), notes: [] });
-    else if (sub === "done") {
-      const t = itemAt(goalAt(g).tasks, x, "task");
-      t.done = true;
-      unblock(t);
-    } else if (sub === "block") {
-      const t = itemAt(goalAt(g).tasks, x, "task");
-      unblock(t);
-      t.notes.push(`blocked: ${need(why, "reason")}`);
-    } else if (sub === "unblock") unblock(itemAt(goalAt(g).tasks, x, "task"));
+    else if (sub === "done") itemAt(goalAt(g).tasks, x, "task").done = true;
     else fail(`unknown: task ${sub ?? ""}\n\n${USAGE}`);
+    break;
+  }
+  case "block": {
+    const [g, text, why] = rest;
+    goalAt(g).blocked.push({ done: false, text: need(text, "work"), notes: [`waiting for: ${need(why, "what it waits for")}`] });
+    break;
+  }
+  case "unblock": {
+    const [g, n] = rest;
+    const goal = goalAt(g);
+    itemAt(goal.blocked, n, "blocked item");
+    const [b] = goal.blocked.splice(Number(n) - 1, 1);
+    goal.tasks.push({ done: false, text: b.text, notes: [] });
     break;
   }
   case "ask": {

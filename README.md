@@ -2,12 +2,12 @@
 
 A herdr popup that lists every agent session on one screen, ordered by who needs you.
 
-![The board popup: one session expanded with its questions, tasks and blocked tasks, the others on one line each](docs/screenshot.png)
+![The board popup: one session expanded with its questions, tasks and blocked work, the others on one line each](docs/screenshot.png)
 
 Two kinds of information are shown:
 
 - **Collected automatically**: agent status, workspace/tab, repository, branch, pull request (state, CI, review) and listening ports.
-- **Written by the agents**: goals, tasks (including the ones that are blocked) and open questions, through the bundled `herdr-board` command.
+- **Written by the agents**: goals, tasks, blocked work and open questions, through the bundled `herdr-board` command.
 
 The second part is what makes it useful with many sessions. Each agent writes its questions down instead of only asking them in its own pane, so nothing is lost when several sessions are waiting for you at once.
 
@@ -51,8 +51,8 @@ The plugin directory can move when you run `herdr plugin update`. If `herdr-boar
 | `j` / `k`, arrows | Move the selection |
 | `Space` | Expand or collapse the selected session |
 | `Enter` on a session | Focus that agent and close the popup |
-| `Enter` on a question or task | Type it into that agent's prompt (not submitted) and focus the agent |
-| `x` | Mark the selected task or question done / not done |
+| `Enter` on a question, task or blocked item | Type it into that agent's prompt (not submitted) and focus the agent |
+| `x` | Mark the selected task, question or blocked item done / not done |
 | `d` | Show the last finished goals of expanded sessions |
 | `i` | Show or hide idle sessions |
 | `r` | Refresh git, pull request and port information now |
@@ -72,7 +72,8 @@ The user watches all sessions on one board and answers from there.
 Run `herdr-board` for the command list and `herdr-board show` for the current notes and their numbers.
 
 - **Goals**: if a request continues the current goal, add tasks to it; if it is a different topic, add a goal with `goal add`. Do not create a goal for something that takes one or two tool calls.
-- **Tasks**: before starting, split the work into 3–7 tasks with `task add`, and run `task done` as each one finishes. When a task cannot be worked on yet (it waits for another task, a merge, a deploy, someone else), mark it with `task block` and the reason, and `task unblock` it when that is resolved.
+- **Tasks**: before starting, split the work into 3–7 tasks with `task add`, and run `task done` as each one finishes.
+- **Blocked**: work that cannot start yet because it waits for something other than the user (another task, a merge, a deploy, someone else) goes in with `block` and what it waits for, not with `task add`. When the wait is over, `unblock` turns it into a task. Waiting for the user's answer is a question, not this.
 - **Questions**: write a question with `ask` before asking the user. Keep working on whatever does not depend on the answer. Use `--assume` when you proceed on an assumption and `--blocks` when some work cannot proceed. Stop only when everything is waiting. Record the reply with `answer`.
 - **Finishing**: when all tasks and questions are settled, run `goal done`; if the goal is abandoned, `goal drop`.
 - If `herdr-board` is missing or fails, carry on without it.
@@ -89,8 +90,8 @@ herdr-board goal done <g> "<result>"          finished (moved to the archive fil
 herdr-board goal drop <g> "<reason>"          abandoned (moved to the archive file)
 herdr-board task add <g> "<task>"
 herdr-board task done <g> <n>
-herdr-board task block <g> <n> "<reason>"     cannot be worked on yet
-herdr-board task unblock <g> <n>
+herdr-board block <g> "<work>" "<what it waits for>"   work that cannot start yet
+herdr-board unblock <g> <n>                   the wait is over; it becomes a task
 herdr-board ask <g> "<question>" [--assume "<working assumption>"] [--blocks "<work that is waiting>"]
 herdr-board answer <g> <n> "<answer>"
 herdr-board path

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Lists every herdr agent, ordered: needs you → working → idle.
-// Status, branch, PR and ports are collected automatically; goals, tasks and questions come from the notes agents write with herdr-board.
+// Status, branch, PR and ports are collected automatically; goals, tasks, blocked work and questions come from the notes agents write with herdr-board.
 import { execFile } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -220,7 +220,6 @@ function prLabel(top, branch) {
 }
 
 const sid = (a) => a.agent_session?.value ?? null;
-const noteOf = (it, key) => it.notes.find((n) => n.startsWith(`${key}: `))?.slice(key.length + 2);
 
 function rows() {
   const home = homedir();
@@ -276,7 +275,7 @@ function build() {
   };
   const sub = (line) => lines.push(paint(clip(line), 90));
 
-  lines.push(paint(clip(` board  ${all.length} sessions  │ j/k select │ Space expand │ Enter go/type/send │ x done │ d finished goals │ i idle │ r refresh │ q quit`), 1));
+  lines.push(paint(clip(` board  ${all.length} sessions  │ j/k select │ Space expand │ Enter go/type │ x done │ d finished goals │ i idle │ r refresh │ q quit`), 1));
   if (state.error) lines.push(paint(` ${state.error}`, 31));
   if (state.flash) lines.push(paint(clip(` ${state.flash}`), 32));
 
@@ -294,7 +293,7 @@ function build() {
       const expanded = ONCE || state.expanded === r.agent.pane_id;
       // Collapsed sessions take one line; open questions show only as a count.
       if (!expanded) continue;
-      // One frame per goal, split into Questions, Tasks and Next.
+      // One frame per goal, split into Questions, Tasks and Blocked.
       r.goals.forEach((g, gi) => {
         const held = g.state === "on hold";
         const open = g.questions.filter((x) => !x.done);
@@ -308,20 +307,15 @@ function build() {
           }
         }
         if (g.tasks.length) {
-          const blocked = g.tasks.filter((t) => !t.done && noteOf(t, "blocked")).length;
-          lines.push(paint(clip(`  ┃ Tasks ${g.tasks.filter((t) => t.done).length}/${g.tasks.length}${blocked ? `  ${blocked} blocked` : ""}`), 1));
-          for (const t of g.tasks) {
-            const why = t.done ? null : noteOf(t, "blocked");
-            push({ row: r, kind: "task", item: t }, `  ┃   ${t.done ? "☑" : why ? "⊘" : "☐"} ${t.text}`, t.done ? 90 : 0);
-            if (why) sub(`  ┃       blocked: ${why}`);
-          }
+          lines.push(paint(clip(`  ┃ Tasks ${g.tasks.filter((t) => t.done).length}/${g.tasks.length}`), 1));
+          for (const t of g.tasks) push({ row: r, kind: "task", item: t }, `  ┃   ${t.done ? "☑" : "☐"} ${t.text}`, t.done ? 90 : 0);
         }
-        if (g.next.length) {
-          lines.push(paint(clip("  ┃ Next (Enter sends it)"), 1));
-          for (const a of g.next) {
-            push({ row: r, kind: "next", goal: g, item: a }, `  ┃   → ${a.text}`, 36);
-            const why = noteOf(a, "reason");
-            if (why) sub(`  ┃       ${why}`);
+        const blocked = g.blocked.filter((x) => !x.done);
+        if (blocked.length) {
+          lines.push(paint(clip(`  ┃ Blocked ${blocked.length}`), 35));
+          for (const b of blocked) {
+            push({ row: r, kind: "blocked", item: b }, `  ┃   ⊘ ${b.text}`, 35);
+            for (const n of b.notes) sub(`  ┃       ${n}`);
           }
         }
         lines.push(paint("  ┗", held ? 90 : 36));
@@ -359,12 +353,14 @@ function render() {
   process.stdout.write("\x1b[H" + lines.slice(offset, offset + rowsMax).map((l) => l + "\x1b[K").join("\n") + "\x1b[J");
 }
 
+const LIST = { task: "tasks", blocked: "blocked", question: "questions" };
+
 // Toggle done/undone. Re-read the file before writing because the agent may be writing at the same time.
 function toggle(entry) {
   const id = sid(entry.row.agent);
-  if (!id || !["task", "question"].includes(entry.kind)) return;
+  const key = LIST[entry.kind];
+  if (!id || !key) return;
   const goals = load(id);
-  const key = entry.kind === "task" ? "tasks" : "questions";
   const item = goals.flatMap((g) => g[key]).find((x) => x.text === entry.item.text);
   if (!item) return;
   item.done = !item.done;
@@ -383,27 +379,13 @@ const herdrDo = (...args) =>
     });
   });
 
-async function sendNext(entry) {
-  const prompt = noteOf(entry.item, "prompt");
-  if (!prompt) return void (state.flash = "✗ This item has no prompt to send");
-  const error = await herdrDo("agent", "prompt", entry.row.agent.pane_id, prompt);
-  if (error) return void (state.flash = /agent_blocked/.test(error) ? "✗ Cannot send: the agent is blocked waiting for input. Go there and answer it" : `✗ Send failed: ${error}`);
-  const id = sid(entry.row.agent);
-  const goals = load(id);
-  const g = goals.find((x) => x.name === entry.goal.name);
-  if (g) g.next = [];
-  save(id, goals);
-  state.flash = `Sent: ${entry.item.text} → ${entry.row.where}`;
-}
-
-// Type a question or task into the agent's prompt without submitting it, so the user can finish the message.
+// Type a question, task or blocked item into the agent's prompt without submitting it, so the user can finish the message.
 async function activate(target) {
   state.flash = null;
-  if (target.kind === "next") return sendNext(target);
   const pane = target.row.agent.pane_id;
   // Typing into an agent that is blocked on a dialog would pick one of its options.
-  if (["task", "question"].includes(target.kind) && target.row.status !== "blocked") {
-    const label = target.kind === "task" ? "Task" : "Question";
+  if (LIST[target.kind] && target.row.status !== "blocked") {
+    const label = { task: "Task", blocked: "Blocked", question: "Question" }[target.kind];
     const error = await herdrDo("pane", "send-text", pane, `${label} "${target.item.text}": `);
     if (error) return void (state.flash = `✗ Typing failed: ${error}`);
   }
@@ -461,7 +443,7 @@ if (process.stdin.isTTY) {
       const target = current[state.selected];
       if (target) {
         await activate(target);
-        // Close the popup after moving or sending. Keep it open on failure so the reason stays readable.
+        // Close the popup after moving. Keep it open on failure so the reason stays readable.
         if (!state.flash?.startsWith("✗")) return quit();
       }
     } else if (k === "x") {
